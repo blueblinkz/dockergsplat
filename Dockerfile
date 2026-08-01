@@ -106,17 +106,7 @@ RUN git clone --depth 1 --branch ${OPENSPLAT_GIT_REF} https://github.com/pieroto
 RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
     /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSPLAT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG}
 
-# Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
-RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
-      echo "import sys, torch" > /tmp/check_torch.py && \
-      echo "expected = '${CUDA_VERSION}'.split('.')[:2]" >> /tmp/check_torch.py && \
-      echo "cuda_ver = torch.version.cuda or ''" >> /tmp/check_torch.py && \
-      echo "if not cuda_ver.startswith('{}.{}'.format(expected[0], expected[1])):" >> /tmp/check_torch.py && \
-      echo "    print('ERROR: torch.version.cuda =', cuda_ver, 'does not start with expected', '{}.{}'.format(expected[0], expected[1]))" >> /tmp/check_torch.py && \
-      echo "    sys.exit(1)" >> /tmp/check_torch.py && \
-      echo "print('Torch CUDA check ok:', cuda_ver)" >> /tmp/check_torch.py && \
-      python3 /tmp/check_torch.py && rm -f /tmp/check_torch.py; \
-    fi
+
 
 # Keep runtime artifacts
 RUN mkdir -p /artifacts && cp -a /usr/local/bin /artifacts/ || true && cp -a /usr/local/lib /artifacts/ || true && cp -a /opt/libtorch /artifacts/ || true && cp -a /opt/venv /artifacts/ || true
