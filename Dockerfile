@@ -19,7 +19,7 @@ ARG OPENSPLAT_GIT_REF=main
 
 ARG PYTHON_VERSION=3.10
 ARG PYCOLMAP_PKG="pycolmap-cuda12"
-ARG GSLAPT_PKG="gsplat"
+ARG GSPLAT_PKG="gsplat"
 ARG OPENCV_PKG="opencv-python-headless==4.8.1.78"
 ARG NUMPY_PKG="numpy==1.26.4"
 ARG PIL_PKG="Pillow==10.0.0"
@@ -27,6 +27,26 @@ ARG TQDM_PKG="tqdm==4.66.1"
 ARG VALIDATE_TORCH=true
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder
+
+# ARGs declared before the first FROM are NOT visible inside a build stage
+# unless re-declared here. Without this block, every ${...} reference below
+# (OIIO_VERSION, CUDA_ARCHITECTURES, COLMAP_GIT_REF, etc.) silently evaluates
+# to an empty string, which is what broke the `git clone --branch` command.
+ARG CUDA_VERSION
+ARG CUDA_ARCHITECTURES
+ARG TORCH_CUDA_TAG
+ARG TORCH_VERSION
+ARG OIIO_VERSION
+ARG COLMAP_GIT_REF
+ARG GLOMAP_GIT_REF
+ARG OPENSPLAT_GIT_REF
+ARG PYCOLMAP_PKG
+ARG GSPLAT_PKG
+ARG OPENCV_PKG
+ARG NUMPY_PKG
+ARG PIL_PKG
+ARG TQDM_PKG
+ARG VALIDATE_TORCH
 
 LABEL org.opencontainers.image.source="https://github.com/blueblinkz/dockergsplat"
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -84,7 +104,7 @@ RUN git clone --depth 1 --branch ${OPENSPLAT_GIT_REF} https://github.com/pieroto
 
 # Python packages (venv)
 RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
-    /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSLAPT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG}
+    /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSPLAT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG}
 
 # Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
 RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
