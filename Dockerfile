@@ -97,7 +97,7 @@ if not cuda_ver.startswith("{}.{}".format(expected[0], expected[1])):
     sys.exit(1)
 print("Torch CUDA check ok:", cuda_ver)
 PYCODE
-    fi
+
 
 # Keep runtime artifacts
 RUN mkdir -p /artifacts && cp -a /usr/local/bin /artifacts/ || true && cp -a /usr/local/lib /artifacts/ || true && cp -a /opt/libtorch /artifacts/ || true && cp -a /opt/venv /artifacts/ || true
