@@ -61,8 +61,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-filesystem-dev libboost-thread-dev \
     libeigen3-dev libflann-dev libfreeimage-dev libmetis-dev \
     libgoogle-glog-dev libgtest-dev libgmock-dev libsqlite3-dev \
-    libglew-dev qtbase5-dev libqt5opengl5-dev \
-    libcgal-dev libceres-dev \
+    libglew-dev qtbase5-dev libqt5opengl5-dev libqt5svg5-dev \
+    libcgal-dev libceres-dev libsuitesparse-dev libcurl4-openssl-dev \
     libopencv-dev \
     libopenexr-dev libtiff-dev libpng-dev libjpeg-turbo8-dev libwebp-dev \
     libraw-dev libssl-dev zlib1g && rm -rf /var/lib/apt/lists/*
