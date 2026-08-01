@@ -42,7 +42,7 @@ ARG PYTHON_VERSION=3.10
 
 ENV DEBIAN_FRONTEND=noninteractive \
     CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
-    TORCH_CUDA_ARCH_LIST="8.6 8.9 9.0 12.0" \
+    TORCH_CUDA_ARCH_LIST="8.6 8.9 9.0" \
     PATH=/opt/venv/bin:/usr/local/bin:${PATH} \
     LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64:${LD_LIBRARY_PATH}
 
