@@ -75,7 +75,7 @@ WORKDIR /opt/src
 # OpenImageIO (shallow clone by tag)
 RUN git clone --depth 1 --branch ${OIIO_VERSION} https://github.com/AcademySoftwareFoundation/OpenImageIO.git oiio && \
     cd oiio && mkdir -p build && cd build && \
-    /opt/venv/bin/cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DOIIO_BUILD_TESTS=OFF -DOIIO_BUILD_TOOLS=ON -DUSE_PYTHON=OFF && \
+    /opt/venv/bin/cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DOIIO_BUILD_TESTS=OFF -DOIIO_BUILD_TOOLS=ON -DUSE_PYTHON=OFF && \
     /opt/venv/bin/ninja && /opt/venv/bin/ninja install && cd /opt/src && rm -rf oiio
 
 # COLMAP
