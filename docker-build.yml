@@ -32,7 +32,7 @@ on:
         required: false
       cuda_architectures:
         description: "CMAKE_CUDA_ARCHITECTURES list"
-        default: "86;89;90;120"
+        default: "89"
         required: false
       image_tag:
         description: "Tag for the built image"
@@ -91,7 +91,7 @@ jobs:
             CUDA_VERSION=${{ inputs.cuda_version || '12.4.1' }}
             TORCH_VERSION=${{ inputs.torch_version || '2.4.1' }}
             TORCH_CUDA_TAG=${{ inputs.torch_cuda_tag || 'cu124' }}
-            CUDA_ARCHITECTURES=${{ inputs.cuda_architectures || '86;89;90;120' }}
+            CUDA_ARCHITECTURES=${{ inputs.cuda_architectures || '89' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
