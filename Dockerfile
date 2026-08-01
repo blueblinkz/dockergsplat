@@ -140,9 +140,5 @@ RUN chown -R root:root /usr/local/bin /usr/local/lib /opt/libtorch && chmod -R a
 USER ${USERNAME}
 ENV HOME=/home/${USERNAME}
 
-# Non-fatal quick checks
-RUN (command -v colmap >/dev/null 2>&1 && colmap -h >/dev/null 2>&1) || true
-RUN (command -v opensplat >/dev/null 2>&1 && opensplat --help >/dev/null 2>&1) || true
-RUN python3 -c "import sys; import gsplat, pycolmap, torch; print('torch.cuda:', torch.version.cuda)" || true
 
 CMD ["/bin/bash"]
