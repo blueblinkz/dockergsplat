@@ -1,5 +1,6 @@
+
 # Save this file as: .github/workflows/docker-build.yml  (in the same repo as your Dockerfile)
-#
+#-
 # Builds and pushes the splat-pipeline image to GitHub Container Registry (ghcr.io)
 # by default — no extra secrets needed, it uses the repo's built-in GITHUB_TOKEN.
 # To push to Docker Hub instead, see the commented block near the bottom.
@@ -46,7 +47,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 280
+    timeout-minutes: 300
     permissions:
       contents: read
       packages: write
@@ -64,17 +65,10 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
-          docker-images: true
           swap-storage: true
-
-      - name: Check available disk space
-        run: df -h /
 
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Compute lowercase image name
-        run: echo "IMAGE_NAME_LC=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -93,19 +87,18 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ inputs.image_tag || 'cu124' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag || 'cu124' }}
           build-args: |
             CUDA_VERSION=${{ inputs.cuda_version || '12.4.1' }}
             TORCH_VERSION=${{ inputs.torch_version || '2.4.1' }}
             TORCH_CUDA_TAG=${{ inputs.torch_cuda_tag || 'cu124' }}
-            CUDA_ARCHITECTURES=${{ inputs.cuda_architectures || '86;89;90;120' }}
+            CUDA_ARCHITECTURES=${{ inputs.cuda_architectures || '89' }}
           cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-to: type=gha,mode=max
 
       - name: Image summary
         run: |
-          echo "Pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ inputs.image_tag || 'cu124' }}" >> $GITHUB_STEP_SUMMARY
-
+          echo "Pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag || 'cu124' }}" >> $GITHUB_STEP_SUMMARY
 # ------------------------------------------------------------------------------
 # To push to Docker Hub instead of ghcr.io:
 #   1. Create a Docker Hub access token (Account Settings -> Security).
@@ -119,5 +112,4 @@ jobs:
 #          password: ${{ secrets.DOCKERHUB_TOKEN }}
 #
 #   4. Change `tags:` above to:
-#      tags: ${{ secrets.DOCKERHUB_USERNAME }}/splat-pipeline:${{ inputs.image_tag || 'cu124' }}
-# ------------------------------------------------------------------------------
+#      tags: $
