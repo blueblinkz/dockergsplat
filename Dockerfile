@@ -104,12 +104,21 @@ RUN git clone --depth 1 --branch ${OPENSPLAT_GIT_REF} https://github.com/pieroto
 
 # Python packages (venv)
 # NOTE: pycolmap-cuda12/gsplat pull in an older torch (observed: torch-2.0.1)
-# as a transitive dependency, silently overwriting the cu124 torch installed
-# below. The final --force-reinstall re-pins torch to the version that
-# actually matches the CUDA base image and the LibTorch used to build OpenSplat.
+# with nvidia-*-cu11 dependencies. NVIDIA's split cu11/cu12 pip packages
+# install their .so files to the SAME path inside site-packages regardless
+# of package name, so whichever installs last silently overwrites the other's
+# shared library on disk — this clobbered our cu124 libnccl.so.2 with an
+# older cu11 build lacking symbols current torch needs (ncclCommRegister).
+# Fix: purge the stray cu11 packages, then force-reinstall torch WITH its
+# full dependency tree (no --no-deps) so the correct cu12 files come back.
 RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
     /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSPLAT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG} && \
-    /opt/venv/bin/pip install --no-cache-dir --force-reinstall --no-deps "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG}
+    /opt/venv/bin/pip uninstall -y \
+      nvidia-cublas-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvrtc-cu11 \
+      nvidia-cuda-runtime-cu11 nvidia-cudnn-cu11 nvidia-cufft-cu11 \
+      nvidia-curand-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 \
+      nvidia-nccl-cu11 nvidia-nvtx-cu11 || true && \
+    /opt/venv/bin/pip install --no-cache-dir --force-reinstall "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG}
 
 # Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
 RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
