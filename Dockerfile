@@ -103,13 +103,25 @@ RUN git clone --depth 1 --branch ${OPENSPLAT_GIT_REF} https://github.com/pieroto
     /opt/venv/bin/ninja && cp opensplat /usr/local/bin/ && cd /opt/src && rm -rf opensplat
 
 # Python packages (venv)
+# NOTE: pycolmap-cuda12/gsplat pull in an older torch (observed: torch-2.0.1)
+# as a transitive dependency, silently overwriting the cu124 torch installed
+# below. The final --force-reinstall re-pins torch to the version that
+# actually matches the CUDA base image and the LibTorch used to build OpenSplat.
 RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
-    /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSPLAT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG}
+    /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSPLAT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG} && \
+    /opt/venv/bin/pip install --no-cache-dir --force-reinstall --no-deps "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG}
 
-
-
-# Keep runtime artifacts
-RUN mkdir -p /artifacts && cp -a /usr/local/bin /artifacts/ || true && cp -a /usr/local/lib /artifacts/ || true && cp -a /opt/libtorch /artifacts/ || true && cp -a /opt/venv /artifacts/ || true
+# Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
+RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
+      echo "import sys, torch" > /tmp/check_torch.py && \
+      echo "expected = '${CUDA_VERSION}'.split('.')[:2]" >> /tmp/check_torch.py && \
+      echo "cuda_ver = torch.version.cuda or ''" >> /tmp/check_torch.py && \
+      echo "if not cuda_ver.startswith('{}.{}'.format(expected[0], expected[1])):" >> /tmp/check_torch.py && \
+      echo "    print('ERROR: torch.version.cuda =', cuda_ver, 'does not start with expected', '{}.{}'.format(expected[0], expected[1]))" >> /tmp/check_torch.py && \
+      echo "    sys.exit(1)" >> /tmp/check_torch.py && \
+      echo "print('Torch CUDA check ok:', cuda_ver)" >> /tmp/check_torch.py && \
+      python3 /tmp/check_torch.py && rm -f /tmp/check_torch.py; \
+    fi
 
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime
 
@@ -129,10 +141,10 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} && useradd --uid ${USER_UID} --gid ${
 
 WORKDIR /workspace
 
-COPY --from=builder /artifacts/usr/local/bin /usr/local/bin
-COPY --from=builder /artifacts/usr/local/lib /usr/local/lib
-COPY --from=builder /artifacts/opt/libtorch /opt/libtorch
-
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /usr/local/lib /usr/local/lib
+COPY --from=builder /opt/libtorch /opt/libtorch
+COPY --from=builder /opt/venv /opt/venv
 
 RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf && ldconfig || true
 RUN chown -R root:root /usr/local/bin /usr/local/lib /opt/libtorch && chmod -R a+rX /usr/local/lib /opt/libtorch
@@ -140,5 +152,9 @@ RUN chown -R root:root /usr/local/bin /usr/local/lib /opt/libtorch && chmod -R a
 USER ${USERNAME}
 ENV HOME=/home/${USERNAME}
 
+# Non-fatal quick checks
+RUN (command -v colmap >/dev/null 2>&1 && colmap -h >/dev/null 2>&1) || true
+RUN (command -v opensplat >/dev/null 2>&1 && opensplat --help >/dev/null 2>&1) || true
+RUN python3 -c "import sys; import gsplat, pycolmap, torch; print('torch.cuda:', torch.version.cuda)" || true
 
 CMD ["/bin/bash"]
