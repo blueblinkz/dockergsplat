@@ -93,7 +93,7 @@ RUN git clone https://github.com/colmap/colmap.git && \
     mkdir build && cd build && \
     cmake .. -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
+      -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
       -DCUDA_ENABLED=ON && \
     ninja && ninja install && \
     cd /opt/src && rm -rf colmap
@@ -106,7 +106,7 @@ RUN git clone https://github.com/colmap/glomap.git && \
     mkdir build && cd build && \
     cmake .. -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} && \
+      -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" && \
     ninja && ninja install && \
     cd /opt/src && rm -rf glomap
 
@@ -129,7 +129,7 @@ RUN git clone https://github.com/pierotofy/OpenSplat.git opensplat && \
     cmake .. -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_PREFIX_PATH=/opt/libtorch \
-      -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
+      -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
       -DGPU_RUNTIME=CUDA && \
     ninja && \
     cp opensplat /usr/local/bin/ && \
