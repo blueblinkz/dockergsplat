@@ -1,0 +1,116 @@
+# Save this file as: .github/workflows/docker-build.yml  (in the same repo as your Dockerfile)
+#
+# Builds and pushes the splat-pipeline image to GitHub Container Registry (ghcr.io)
+# by default — no extra secrets needed, it uses the repo's built-in GITHUB_TOKEN.
+# To push to Docker Hub instead, see the commented block near the bottom.
+#
+# Triggers:
+#   - Push to main that touches the Dockerfile
+#   - Manual run from the Actions tab, with overridable build args
+
+name: Build and push splat-pipeline image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - ".github/workflows/docker-build.yml"
+  workflow_dispatch:
+    inputs:
+      cuda_version:
+        description: "CUDA base image version"
+        default: "12.4.1"
+        required: false
+      torch_version:
+        description: "PyTorch / LibTorch version"
+        default: "2.4.1"
+        required: false
+      torch_cuda_tag:
+        description: "PyTorch CUDA tag (must match cuda_version family)"
+        default: "cu124"
+        required: false
+      cuda_architectures:
+        description: "CMAKE_CUDA_ARCHITECTURES list"
+        default: "86;89;90;120"
+        required: false
+      image_tag:
+        description: "Tag for the built image"
+        default: "cu124"
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # The CUDA devel base image + COLMAP + LibTorch + OpenSplat builds easily
+      # blow past the ~14GB free on a stock GitHub-hosted runner. This step
+      # removes preinstalled toolchains we don't need (Android SDK, .NET,
+      # Haskell, etc.) to free up room before the build starts.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag || 'cu124' }}
+          build-args: |
+            CUDA_VERSION=${{ inputs.cuda_version || '12.4.1' }}
+            TORCH_VERSION=${{ inputs.torch_version || '2.4.1' }}
+            TORCH_CUDA_TAG=${{ inputs.torch_cuda_tag || 'cu124' }}
+            CUDA_ARCHITECTURES=${{ inputs.cuda_architectures || '86;89;90;120' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image summary
+        run: |
+          echo "Pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag || 'cu124' }}" >> $GITHUB_STEP_SUMMARY
+
+# ------------------------------------------------------------------------------
+# To push to Docker Hub instead of ghcr.io:
+#   1. Create a Docker Hub access token (Account Settings -> Security).
+#   2. Add repo secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
+#   3. Replace the "Log in to GitHub Container Registry" step with:
+#
+#      - name: Log in to Docker Hub
+#        uses: docker/login-action@v3
+#        with:
+#          username: ${{ secrets.DOCKERHUB_USERNAME }}
+#          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#
+#   4. Change `tags:` above to:
+#      tags: ${{ secrets.DOCKERHUB_USERNAME }}/splat-pipeline:${{ inputs.image_tag || 'cu124' }}
+# ------------------------------------------------------------------------------
