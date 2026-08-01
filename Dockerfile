@@ -70,41 +70,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip "cmake>=3.28" "ninja>=1.11"
 
-# Python packages (venv) — done early, right after venv creation, so a broken
-# pip install / torch-CUDA mismatch fails in minutes rather than after the
-# ~2+ hour OIIO/COLMAP/GLOMAP/OpenSplat builds below. None of those C++
-# builds depend on this step (OpenSplat links the C++ LibTorch downloaded
-# separately below, not this pip-installed python torch package).
-#
-# NOTE: pycolmap-cuda12/gsplat pull in an older torch (observed: torch-2.0.1)
-# with nvidia-*-cu11 dependencies. NVIDIA's split cu11/cu12 pip packages
-# install their .so files to the SAME path inside site-packages regardless
-# of package name, so whichever installs last silently overwrites the other's
-# shared library on disk — this clobbered our cu124 libnccl.so.2 with an
-# older cu11 build lacking symbols current torch needs (ncclCommRegister).
-# Fix: purge the stray cu11 packages, then force-reinstall torch WITH its
-# full dependency tree (no --no-deps) so the correct cu12 files come back.
-RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
-    /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSPLAT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG} && \
-    /opt/venv/bin/pip uninstall -y \
-      nvidia-cublas-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvrtc-cu11 \
-      nvidia-cuda-runtime-cu11 nvidia-cudnn-cu11 nvidia-cufft-cu11 \
-      nvidia-curand-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 \
-      nvidia-nccl-cu11 nvidia-nvtx-cu11 || true && \
-    /opt/venv/bin/pip install --no-cache-dir --force-reinstall "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG}
-
-# Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
-RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
-      echo "import sys, torch" > /tmp/check_torch.py && \
-      echo "expected = '${CUDA_VERSION}'.split('.')[:2]" >> /tmp/check_torch.py && \
-      echo "cuda_ver = torch.version.cuda or ''" >> /tmp/check_torch.py && \
-      echo "if not cuda_ver.startswith('{}.{}'.format(expected[0], expected[1])):" >> /tmp/check_torch.py && \
-      echo "    print('ERROR: torch.version.cuda =', cuda_ver, 'does not start with expected', '{}.{}'.format(expected[0], expected[1]))" >> /tmp/check_torch.py && \
-      echo "    sys.exit(1)" >> /tmp/check_torch.py && \
-      echo "print('Torch CUDA check ok:', cuda_ver)" >> /tmp/check_torch.py && \
-      python3 /tmp/check_torch.py && rm -f /tmp/check_torch.py; \
-    fi
-
 WORKDIR /opt/src
 
 # OpenImageIO (shallow clone by tag)
@@ -137,6 +102,36 @@ RUN git clone --depth 1 --branch ${OPENSPLAT_GIT_REF} https://github.com/pieroto
     /opt/venv/bin/cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/libtorch -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" -DGPU_RUNTIME=CUDA && \
     /opt/venv/bin/ninja && cp opensplat /usr/local/bin/ && cd /opt/src && rm -rf opensplat
 
+# Python packages (venv)
+# NOTE: pycolmap-cuda12/gsplat pull in an older torch (observed: torch-2.0.1)
+# with nvidia-*-cu11 dependencies. NVIDIA's split cu11/cu12 pip packages
+# install their .so files to the SAME path inside site-packages regardless
+# of package name, so whichever installs last silently overwrites the other's
+# shared library on disk — this clobbered our cu124 libnccl.so.2 with an
+# older cu11 build lacking symbols current torch needs (ncclCommRegister).
+# Fix: purge the stray cu11 packages, then force-reinstall torch WITH its
+# full dependency tree (no --no-deps) so the correct cu12 files come back.
+RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
+    /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSPLAT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG} && \
+    /opt/venv/bin/pip uninstall -y \
+      nvidia-cublas-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvrtc-cu11 \
+      nvidia-cuda-runtime-cu11 nvidia-cudnn-cu11 nvidia-cufft-cu11 \
+      nvidia-curand-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 \
+      nvidia-nccl-cu11 nvidia-nvtx-cu11 || true && \
+    /opt/venv/bin/pip install --no-cache-dir --force-reinstall "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG}
+
+# Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
+RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
+      echo "import sys, torch" > /tmp/check_torch.py && \
+      echo "expected = '${CUDA_VERSION}'.split('.')[:2]" >> /tmp/check_torch.py && \
+      echo "cuda_ver = torch.version.cuda or ''" >> /tmp/check_torch.py && \
+      echo "if not cuda_ver.startswith('{}.{}'.format(expected[0], expected[1])):" >> /tmp/check_torch.py && \
+      echo "    print('ERROR: torch.version.cuda =', cuda_ver, 'does not start with expected', '{}.{}'.format(expected[0], expected[1]))" >> /tmp/check_torch.py && \
+      echo "    sys.exit(1)" >> /tmp/check_torch.py && \
+      echo "print('Torch CUDA check ok:', cuda_ver)" >> /tmp/check_torch.py && \
+      python3 /tmp/check_torch.py && rm -f /tmp/check_torch.py; \
+    fi
+
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime
 
 ARG USERNAME=splat
@@ -151,6 +146,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-turbo8 libpng16-16 libtiff5 libwebp-dev libopenexr-dev libraw-dev \
     libssl3 zlib1g libsqlite3-0 libgomp1 libstdc++6 \
     libsm6 libice6 libxext6 libxrender1 libgl1 && rm -rf /var/lib/apt/lists/*
+
 
 RUN groupadd --gid ${USER_GID} ${USERNAME} && useradd --uid ${USER_UID} --gid ${USER_GID} --create-home --shell /bin/bash ${USERNAME} && mkdir -p /workspace && chown ${USERNAME}:${USERNAME} /workspace
 
