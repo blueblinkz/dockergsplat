@@ -132,7 +132,7 @@ WORKDIR /workspace
 COPY --from=builder /artifacts/usr/local/bin /usr/local/bin
 COPY --from=builder /artifacts/usr/local/lib /usr/local/lib
 COPY --from=builder /artifacts/opt/libtorch /opt/libtorch
-COPY --from=builder /artifacts/opt/venv /opt/venv
+
 
 RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf && ldconfig || true
 RUN chown -R root:root /usr/local/bin /usr/local/lib /opt/libtorch && chmod -R a+rX /usr/local/lib /opt/libtorch
