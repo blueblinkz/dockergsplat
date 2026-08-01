@@ -86,18 +86,17 @@ RUN git clone --depth 1 --branch ${OPENSPLAT_GIT_REF} https://github.com/pieroto
 RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
     /opt/venv/bin/pip install --no-cache-dir ${PYCOLMAP_PKG} ${GSLAPT_PKG} ${OPENCV_PKG} ${NUMPY_PKG} ${PIL_PKG} ${TQDM_PKG}
 
-# Optional torch/CUDA validation
+# Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
 RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
-      python3 - <<PYCODE
-import sys, torch
-expected = "${CUDA_VERSION}".split('.')[:2]
-cuda_ver = torch.version.cuda or ""
-if not cuda_ver.startswith("{}.{}".format(expected[0], expected[1])):
-    print("ERROR: torch.version.cuda =", cuda_ver, "does not start with expected", "{}.{}".format(expected[0], expected[1]))
-    sys.exit(1)
-print("Torch CUDA check ok:", cuda_ver)
-PYCODE
-
+      echo "import sys, torch" > /tmp/check_torch.py && \
+      echo "expected = '${CUDA_VERSION}'.split('.')[:2]" >> /tmp/check_torch.py && \
+      echo "cuda_ver = torch.version.cuda or ''" >> /tmp/check_torch.py && \
+      echo "if not cuda_ver.startswith('{}.{}'.format(expected[0], expected[1])):" >> /tmp/check_torch.py && \
+      echo "    print('ERROR: torch.version.cuda =', cuda_ver, 'does not start with expected', '{}.{}'.format(expected[0], expected[1]))" >> /tmp/check_torch.py && \
+      echo "    sys.exit(1)" >> /tmp/check_torch.py && \
+      echo "print('Torch CUDA check ok:', cuda_ver)" >> /tmp/check_torch.py && \
+      python3 /tmp/check_torch.py && rm -f /tmp/check_torch.py; \
+    fi
 
 # Keep runtime artifacts
 RUN mkdir -p /artifacts && cp -a /usr/local/bin /artifacts/ || true && cp -a /usr/local/lib /artifacts/ || true && cp -a /opt/libtorch /artifacts/ || true && cp -a /opt/venv /artifacts/ || true
@@ -113,7 +112,7 @@ ENV PATH=/opt/venv/bin:/usr/local/bin:${PATH} \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates python3 python3-venv python3-pip \
-    libjpeg-turbo8 libpng16-16 libtiff5 libwebp6 libopenexr24 libraw19 \
+    libjpeg-turbo8 libpng16-16 libtiff5 libwebp-dev libopenexr-dev libraw-dev \
     libssl3 zlib1g libsqlite3-0 libgomp1 libstdc++6 && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid ${USER_GID} ${USERNAME} && useradd --uid ${USER_UID} --gid ${USER_GID} --create-home --shell /bin/bash ${USERNAME} && mkdir -p /workspace && chown ${USERNAME}:${USERNAME} /workspace
