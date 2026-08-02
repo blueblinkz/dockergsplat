@@ -91,8 +91,7 @@ RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-u
       nvidia-cuda-runtime-cu11 nvidia-cudnn-cu11 nvidia-cufft-cu11 \
       nvidia-curand-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 \
       nvidia-nccl-cu11 nvidia-nvtx-cu11 || true && \
-    /opt/venv/bin/pip install --no-cache-dir --force-reinstall "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
-    /opt/venv/bin/pip uninstall -y nvidia-cudnn-cu12 || true
+    /opt/venv/bin/pip install --no-cache-dir --force-reinstall "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG}
 
 # Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
 RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
