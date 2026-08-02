@@ -1,84 +1,63 @@
-# Splat Pipeline Docker Image
+# CUDA + PyTorch + gsplat + nerfstudio
 
-Builds COLMAP, GLOMAP, and OpenSplat from source in one image, and pip-installs
-`pycolmap-cuda12` and `gsplat` alongside them.
+A minimal, single-stage image for running [gsplat](https://github.com/nerfstudio-project/gsplat) and [nerfstudio](https://docs.nerf.studio) on a GPU. No COLMAP/GLOMAP build included — bring your own preprocessed data (camera poses + sparse point cloud), or use nerfstudio's own `ns-process-data` command once inside the container.
+
+## What's in the image
+
+- CUDA 12.4.1 + cuDNN (runtime, not devel — no compiler toolchain, so this image can't build anything from source)
+- PyTorch 2.4.1 (cu124), torchvision, torchaudio
+- gsplat, nerfstudio
+- numpy, pillow, opencv-python-headless, tqdm, imageio, imageio-ffmpeg, scikit-image, lpips, rich, tyro
+- tiny-cuda-nn (best-effort — the build is wrapped in `|| true`, so the image still builds even if this step fails; check the build log to confirm it actually installed)
+- ffmpeg, git
 
 ## Build
 
 ```bash
-docker build -t splat-pipeline:cu124 \
-  --build-arg CUDA_ARCHITECTURES="86;89;90;120" \
+docker build -t gsplat-nerfstudio:ada \
   --build-arg CUDA_VERSION=12.4.1 \
   --build-arg TORCH_VERSION=2.4.1 \
   --build-arg TORCH_CUDA_TAG=cu124 \
+  --build-arg CUDA_ARCHITECTURES="89" \
   .
 ```
 
-Expect 30-60+ minutes on first build (COLMAP and OpenImageIO are the slow parts).
-Nothing here uses BuildKit cache mounts, so re-runs after a Dockerfile edit will
-rebuild every layer after the change — add `--mount=type=cache` to the `ninja`
-steps yourself if you're iterating a lot.
+Build takes a few minutes — this is a pip-only image, nothing compiled from source except tiny-cuda-nn's CUDA extension.
 
 ## Run
 
 ```bash
-docker run --gpus all -it -v /workspace:/workspace splat-pipeline:cu124
+docker run --gpus all -it -v /workspace:/workspace gsplat-nerfstudio:ada
 ```
 
-Inside the container: `colmap`, `glomap`, and `opensplat` are on `PATH`.
-Python (`/opt/venv/bin/python`, also first on `PATH`) has `pycolmap`, `gsplat`,
-and `torch` importable.
+Mount your data directory to `/workspace` so it's visible inside the container.
 
-## Keeping CUDA/PyTorch versions in sync
+## Keeping versions in sync
 
-The three build args `CUDA_VERSION` (base image), `TORCH_VERSION` +
-`TORCH_CUDA_TAG` (LibTorch download for OpenSplat's C++ build), and the pip
-`torch` install must all agree, or you'll get silent CPU fallback or a link
-error. Check available LibTorch CUDA tags before changing `CUDA_VERSION`:
-https://download.pytorch.org/libtorch/ — the folder names (`cu121`, `cu124`,
-`cu126`, ...) are the valid `TORCH_CUDA_TAG` values.
+`CUDA_VERSION`, `TORCH_VERSION`, and `TORCH_CUDA_TAG` must agree with each other, or torch will silently fall back to CPU or fail to import. The base image's CUDA runtime version and the `TORCH_CUDA_TAG` wheel index (`cu121`, `cu124`, `cu126`, ...) need to be from the same CUDA release family. Check available tags at https://download.pytorch.org/whl/torch/ before changing either.
 
-## GPU architecture reference
+## GPU architecture (`CUDA_ARCHITECTURES` / `TORCH_CUDA_ARCH_LIST`)
 
-Covers the GPU fleet actually rented on RunPod (A4500, RTX 2000 Ada, L4,
-L40S, RTX 4090, RTX 5090), plus Hopper (90) included pre-emptively in case
-an H100 gets rented later. Drop 90 if you never touch Hopper — each extra
-arch adds to CUDA kernel compile time for COLMAP/OpenSplat.
+Defaults to `"89"` — Ada Lovelace only (RTX 4090, RTX 2000 Ada, L4, L40S). This value is used directly as `TORCH_CUDA_ARCH_LIST`, which controls which GPU architectures tiny-cuda-nn's CUDA extension compiles for.
 
-| GPU | Compute capability | Arch flag |
+| GPU | Architecture | Value |
 |---|---|---|
-| A4500 | Ampere | 86 |
-| RTX 2000 Ada / L4 / L40S / RTX 4090 | Ada Lovelace | 89 |
-| H100 | Hopper | 90 |
-| RTX 5090 | Blackwell | 120 |
+| A4500, A100 | Ampere | `86` |
+| RTX 4090, RTX 2000 Ada, L4, L40S | Ada Lovelace | `89` |
+| H100 | Hopper | `90` |
+| RTX 5090 | Blackwell | `120` — **needs CUDA ≥ 12.8**, won't compile against this image's CUDA 12.4.1 base |
 
-`CMAKE_CUDA_ARCHITECTURES` (COLMAP/GLOMAP/OpenSplat) and `TORCH_CUDA_ARCH_LIST`
-(PyTorch/gsplat JIT kernels) are both set from the `CUDA_ARCHITECTURES` build
-arg via the Dockerfile's `ENV` line — trim the list to the GPUs you actually
-target to cut build time, since each extra arch roughly multiplies CUDA kernel
-compile time for COLMAP and OpenSplat.
+For multiple architectures, use a semicolon-separated list, e.g. `"86;89"`. Note this Dockerfile passes the value straight through unquoted in one spot (`ENV TORCH_CUDA_ARCH_LIST=${CUDA_ARCHITECTURES}`) — that's fine as an `ENV` assignment (not parsed by a shell), but if you ever add a multi-value default to a `RUN` command in this file, quote it, or the shell will split on the semicolons.
 
-## Things that bit us building this on RunPod, encoded into the Dockerfile
+## Sanity checks
 
-- **OpenImageIO before COLMAP.** COLMAP's CMakeLists hard-requires OpenImageIO
-  via `find_package`; if it's missing, some COLMAP builds fail outright and
-  others silently disable features. It's built and `ninja install`ed first.
-- **GLOMAP needs CMake ≥3.28.** Ubuntu 22.04's apt `cmake` is older, so a
-  fresh CMake is installed into a venv that's placed first on `PATH` for the
-  whole build.
-- **`pycolmap-cuda12` doesn't need the from-source COLMAP build.** It's a
-  self-contained wheel with bundled CUDA runtime libs — it's independent of
-  the `colmap`/`glomap` CLI binaries, just pip-installed for convenience.
-- **GLOMAP is upstream-deprecated.** The `colmap/glomap` repo is currently
-  tagged `[DEPRECATED]` on GitHub as of this writing but still builds and runs
-  against current COLMAP; worth periodically checking if colmap.github.io
-  points you to a successor.
-- **Nothing needs `/workspace` redirection here** the way your RunPod
-  `setsplat.sh` does — everything installs to `/usr/local` inside the image
-  layer itself, which persists as part of the image. `/workspace` is only
-  mounted in for your actual data/output.
+The build itself verifies `torch`, `gsplat`, and `nerfstudio` all import cleanly (build fails if any of these three don't). It does **not** verify tiny-cuda-nn imports, since that install is allowed to fail silently. To confirm it actually installed, run inside the container:
 
-## If a GitHub `main` branch build breaks
+```bash
+python -c "import tinycudann; print('tiny-cuda-nn OK')"
+```
 
-Pin `COLMAP_GIT_COMMIT`, `GLOMAP_GIT_COMMIT`, or `OPENSPLAT_GIT_COMMIT` to a
-known-good commit hash as a `--build-arg` rather than tracking `main`.
+## Known gaps
+
+- No COLMAP, GLOMAP, or OpenSplat — this is a lighter-weight image for the gsplat/nerfstudio side only.
+- Runtime (not devel) CUDA base — you can't compile new CUDA extensions inside a running container from this image; the tiny-cuda-nn build has to succeed at image-build time or not at all.
