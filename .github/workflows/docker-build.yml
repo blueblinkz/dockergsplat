@@ -55,7 +55,8 @@ jobs:
       # The CUDA devel base image + COLMAP + LibTorch + OpenSplat builds easily
       # blow past the ~14GB free on a stock GitHub-hosted runner. This step
       # removes preinstalled toolchains we don't need (Android SDK, .NET,
-      # Haskell, etc.) to free up room before the build starts.
+      # Haskell, preinstalled Docker images, etc.) to free up room before the
+      # build starts.
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -64,10 +65,14 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
+          docker-images: true
           swap-storage: true
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Compute lowercase image name
+        run: echo "IMAGE_NAME_LC=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -86,18 +91,19 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag || 'cu124' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ inputs.image_tag || 'cu124' }}
           build-args: |
             CUDA_VERSION=${{ inputs.cuda_version || '12.4.1' }}
             TORCH_VERSION=${{ inputs.torch_version || '2.4.1' }}
             TORCH_CUDA_TAG=${{ inputs.torch_cuda_tag || 'cu124' }}
             CUDA_ARCHITECTURES=${{ inputs.cuda_architectures || '89' }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
 
       - name: Image summary
         run: |
-          echo "Pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag || 'cu124' }}" >> $GITHUB_STEP_SUMMARY
+          echo "Pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ inputs.image_tag || 'cu124' }}" >> $GITHUB_STEP_SUMMARY
+
 # ------------------------------------------------------------------------------
 # To push to Docker Hub instead of ghcr.io:
 #   1. Create a Docker Hub access token (Account Settings -> Security).
@@ -111,4 +117,5 @@ jobs:
 #          password: ${{ secrets.DOCKERHUB_TOKEN }}
 #
 #   4. Change `tags:` above to:
-#      tags: $
+#      tags: ${{ secrets.DOCKERHUB_USERNAME }}/splat-pipeline:${{ inputs.image_tag || 'cu124' }}
+# ------------------------------------------------------------------------------
