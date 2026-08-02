@@ -91,7 +91,8 @@ RUN /opt/venv/bin/pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-u
       nvidia-cuda-runtime-cu11 nvidia-cudnn-cu11 nvidia-cufft-cu11 \
       nvidia-curand-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 \
       nvidia-nccl-cu11 nvidia-nvtx-cu11 || true && \
-    /opt/venv/bin/pip install --no-cache-dir --force-reinstall "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG}
+    /opt/venv/bin/pip install --no-cache-dir --force-reinstall "torch==${TORCH_VERSION}" --index-url https://download.pytorch.org/whl/${TORCH_CUDA_TAG} && \
+    /opt/venv/bin/pip uninstall -y nvidia-cudnn-cu12 || true
 
 # Optional torch/CUDA validation (single RUN to avoid Dockerfile parser heredoc issues)
 RUN if [ "${VALIDATE_TORCH}" = "true" ]; then \
@@ -136,6 +137,17 @@ RUN git clone --depth 1 --branch ${OPENSPLAT_GIT_REF} https://github.com/pieroto
     cd opensplat && mkdir -p build && cd build && \
     /opt/venv/bin/cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/libtorch -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" -DGPU_RUNTIME=CUDA && \
     /opt/venv/bin/ninja && cp opensplat /usr/local/bin/ && cd /opt/src && rm -rf opensplat
+
+# Shrink the image before export: cmake/ninja were only needed to build
+# COLMAP/GLOMAP/OpenSplat above, not to run them - drop them from the venv
+# that gets copied into the runtime stage. Also strip debug symbols from
+# compiled libraries (a well-known way to cut real size off CUDA/PyTorch
+# .so files) and clear caches, since export ran out of disk last time.
+RUN /opt/venv/bin/pip uninstall -y cmake ninja || true && \
+    find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find /opt/venv -type f -name "*.pyc" -delete && \
+    rm -rf /root/.cache/pip /opt/venv/pip-cache 2>/dev/null || true && \
+    find /usr/local/lib /opt/libtorch/lib /opt/venv/lib -name "*.so*" -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime
 
