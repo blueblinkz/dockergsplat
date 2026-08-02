@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y software-properties-common \
     libboost-program-options-dev \
     libboost-graph-dev \
     libboost-system-dev \
+    libboost-filesystem-dev \
+    libboost-thread-dev \
     libeigen3-dev \
     libflann-dev \
     libfreeimage-dev \
@@ -91,6 +93,8 @@ RUN apt-get update && apt-get install -y software-properties-common \
     libboost-program-options-dev \
     libboost-graph-dev \
     libboost-system-dev \
+    libboost-filesystem-dev \
+    libboost-thread-dev \
     libfreeimage-dev \
     libmetis-dev \
     libgoogle-glog-dev \
