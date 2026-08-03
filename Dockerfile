@@ -65,6 +65,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 # ------------------------------------------------------------------------------
 ARG TORCH_VERSION=2.4.1
 ARG TORCH_CUDA_TAG=cu124
+# Dotted-decimal form for PyTorch (e.g. "8.9"), separate from CUDA_ARCHITECTURES
+# above which CMake wants as "89". Keep this in sync with CUDA_ARCHITECTURES —
+# e.g. 89 -> "8.9", 86 -> "8.6", multiple archs -> "8.6;8.9".
+ARG TORCH_CUDA_ARCH_LIST="8.9"
 
 # Python deps
 ARG NUMPY_PKG="numpy"
@@ -116,7 +120,7 @@ ENV PATH="/opt/colmap/bin:$PATH"
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip install --upgrade pip
+RUN pip install --upgrade pip setuptools wheel
 
 # ------------------------------------------------------------------------------
 # Install PyTorch (CUDA matched)
@@ -140,15 +144,17 @@ RUN pip install --no-cache-dir \
     imageio imageio-ffmpeg scikit-image lpips rich tyro
 
 # ------------------------------------------------------------------------------
+# CUDA tuning for ADA GPUs — set BEFORE building tiny-cuda-nn below, and kept
+# as a persistent ENV since nerfstudio also reads this at training time for
+# its own JIT-compiled CUDA kernels.
+# ------------------------------------------------------------------------------
+ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
+
+# ------------------------------------------------------------------------------
 # Optional: tiny-cuda-nn (performance boost for nerfstudio)
 # ------------------------------------------------------------------------------
 RUN pip install --no-cache-dir \
     git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch || true
-
-# ------------------------------------------------------------------------------
-# CUDA tuning for ADA GPUs
-# ------------------------------------------------------------------------------
-ENV TORCH_CUDA_ARCH_LIST=${CUDA_ARCHITECTURES}
 
 # ------------------------------------------------------------------------------
 # Sanity checks
@@ -156,7 +162,7 @@ ENV TORCH_CUDA_ARCH_LIST=${CUDA_ARCHITECTURES}
 RUN python -c "import torch; print('Torch:', torch.__version__)"
 RUN python -c "import gsplat; print('gsplat OK')"
 RUN python -c "import nerfstudio; print('nerfstudio OK')"
-RUN colmap --version
+RUN colmap -h > /dev/null 2>&1 || (echo "COLMAP binary failed to run" && exit 1)
 
 WORKDIR /workspace
 
